@@ -72,10 +72,15 @@ cover:
 # generate runs `go generate` to build the dynamically generated
 # source files, except the protobuf stubs which are built instead with
 # "make protobuf".
-generate:
+generate: tools
 	@which stringer > /dev/null; if [ $$? -ne 0 ]; then \
 	  GO111MODULE=off go get -u golang.org/x/tools/cmd/stringer; \
 	fi
+	# Install dependencies
+	GO111MODULE=off go get github.com/zclconf/go-cty/cty
+	GO111MODULE=off go get github.com/hashicorp/hcl2/hcl
+	GO111MODULE=off go get github.com/hashicorp/go-multierror
+	GO111MODULE=off go get github.com/hashicorp/hcl
 	# We turn off modules for "go generate" because our downstream generate
 	# commands are not all ready to deal with Go modules yet, and this
 	# avoids downloading all of the deps that are in the vendor dir anyway.
