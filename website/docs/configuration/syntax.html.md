@@ -10,6 +10,10 @@ description: |-
 
 # Configuration Syntax
 
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Syntax](../configuration-0-11/syntax.html).
+
 Other pages in this section have described various configuration constructs
 that can appear in the Terraform language. This page describes the lower-level
 syntax of the language in more detail, revealing the building blocks that
@@ -84,7 +88,7 @@ require none as with the nested `network_interface` block type.
 
 After the block type keyword and any labels, the block _body_ is delimited
 by the `{` and `}` characters. Within the block body, further arguments
-and blocks may be nested, creating a heirarchy of blocks and their associated
+and blocks may be nested, creating a hierarchy of blocks and their associated
 arguments.
 
 The Terraform language uses a limited number of _top-level block types,_ which

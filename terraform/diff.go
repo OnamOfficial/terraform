@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"log"
 	"reflect"
 	"regexp"
 	"sort"
@@ -459,7 +460,6 @@ func (d *InstanceDiff) Apply(attrs map[string]string, schema *configschema.Block
 
 func (d *InstanceDiff) applyBlockDiff(path []string, attrs map[string]string, schema *configschema.Block) (map[string]string, error) {
 	result := map[string]string{}
-
 	name := ""
 	if len(path) > 0 {
 		name = path[len(path)-1]
@@ -494,11 +494,12 @@ func (d *InstanceDiff) applyBlockDiff(path []string, attrs map[string]string, sc
 		// we need to find the set of all keys that traverse this block
 		candidateKeys := map[string]bool{}
 		blockKey := blockPrefix + n + "."
+		localBlockPrefix := localPrefix + n + "."
 
 		// we can only trust the diff for sets, since the path changes, so don't
 		// count existing values as candidate keys. If it turns out we're
-		// keeping the attributes, we will check catch it down below with
-		// "keepBlock" after we check the set count.
+		// keeping the attributes, we will catch it down below with "keepBlock"
+		// after we check the set count.
 		if block.Nesting != configschema.NestingSet {
 			for k := range attrs {
 				if strings.HasPrefix(k, blockKey) {
@@ -544,7 +545,7 @@ func (d *InstanceDiff) applyBlockDiff(path []string, attrs map[string]string, sc
 					}
 
 					// check for empty "count" keys
-					if strings.HasSuffix(attr, ".#") && diff.New == "0" {
+					if (strings.HasSuffix(attr, ".#") || strings.HasSuffix(attr, ".%")) && diff.New == "0" {
 						continue
 					}
 
@@ -570,7 +571,7 @@ func (d *InstanceDiff) applyBlockDiff(path []string, attrs map[string]string, sc
 			}
 
 			for attr, v := range newAttrs {
-				result[localPrefix+n+"."+attr] = v
+				result[localBlockPrefix+attr] = v
 			}
 		}
 
@@ -589,24 +590,54 @@ func (d *InstanceDiff) applyBlockDiff(path []string, attrs map[string]string, sc
 				if strings.HasPrefix(k, blockKey) {
 					// we need the key relative to this block, so remove the
 					// entire prefix, then re-insert the block name.
-					localKey := n + "." + k[len(blockKey):]
-
+					localKey := localBlockPrefix + k[len(blockKey):]
 					result[localKey] = v
 				}
 			}
 		}
 
-		if countDiff, ok := d.Attributes[strings.Join(append(path, n, ".#"), ".")]; ok {
-
+		countAddr := strings.Join(append(path, n, "#"), ".")
+		if countDiff, ok := d.Attributes[countAddr]; ok {
 			if countDiff.NewComputed {
-				result[localPrefix+n+".#"] = hcl2shim.UnknownVariableValue
+				result[localBlockPrefix+"#"] = hcl2shim.UnknownVariableValue
 			} else {
-				result[localPrefix+n+".#"] = countDiff.New
-			}
-		} else {
-			result[localPrefix+n+".#"] = countFlatmapContainerValues(localPrefix+n+".#", result)
-		}
+				result[localBlockPrefix+"#"] = countDiff.New
 
+				// While sets are complete, list are not, and we may not have all the
+				// information to track removals. If the list was truncated, we need to
+				// remove the extra items from the result.
+				if block.Nesting == configschema.NestingList &&
+					countDiff.New != "" && countDiff.New != hcl2shim.UnknownVariableValue {
+					length, _ := strconv.Atoi(countDiff.New)
+					for k := range result {
+						if !strings.HasPrefix(k, localBlockPrefix) {
+							continue
+						}
+
+						index := k[len(localBlockPrefix):]
+						nextDot := strings.Index(index, ".")
+						if nextDot < 1 {
+							continue
+						}
+						index = index[:nextDot]
+						i, err := strconv.Atoi(index)
+						if err != nil {
+							// this shouldn't happen since we added these
+							// ourself, but make note of it just in case.
+							log.Printf("[ERROR] bad list index in %q: %s", k, err)
+							continue
+						}
+						if i >= length {
+							delete(result, k)
+						}
+					}
+				}
+			}
+		} else if origCount, ok := attrs[countAddr]; ok && keepBlock {
+			result[localBlockPrefix+"#"] = origCount
+		} else {
+			result[localBlockPrefix+"#"] = countFlatmapContainerValues(localBlockPrefix+"#", result)
+		}
 	}
 
 	return result, nil
@@ -636,8 +667,9 @@ func (d *InstanceDiff) applySingleAttrDiff(path []string, attrs map[string]strin
 		return result, nil
 	}
 
-	// "id" must exist and not be an empty string, or it must be unknown
-	if attr == "id" {
+	// "id" must exist and not be an empty string, or it must be unknown.
+	// This only applied to top-level "id" fields.
+	if attr == "id" && len(path) == 1 {
 		if old == "" {
 			result[attr] = config.UnknownVariableValue
 		} else {
@@ -667,14 +699,6 @@ func (d *InstanceDiff) applySingleAttrDiff(path []string, attrs map[string]strin
 		return result, nil
 	}
 
-	if diff.Old == diff.New && diff.New == "" {
-		// this can only be a valid empty string
-		if attrSchema.Type == cty.String {
-			result[attr] = ""
-		}
-		return result, nil
-	}
-
 	// check for missmatched diff values
 	if exists &&
 		old != diff.Old &&
@@ -683,13 +707,21 @@ func (d *InstanceDiff) applySingleAttrDiff(path []string, attrs map[string]strin
 		return result, fmt.Errorf("diff apply conflict for %s: diff expects %q, but prior value has %q", attr, diff.Old, old)
 	}
 
-	if attrSchema.Computed && diff.NewComputed {
-		result[attr] = config.UnknownVariableValue
+	if diff.NewRemoved {
+		// don't set anything in the new value
+		return map[string]string{}, nil
+	}
+
+	if diff.Old == diff.New && diff.New == "" {
+		// this can only be a valid empty string
+		if attrSchema.Type == cty.String {
+			result[attr] = ""
+		}
 		return result, nil
 	}
 
-	if diff.NewRemoved {
-		// don't set anything in the new value
+	if attrSchema.Computed && diff.NewComputed {
+		result[attr] = config.UnknownVariableValue
 		return result, nil
 	}
 
@@ -781,9 +813,63 @@ func (d *InstanceDiff) applyCollectionDiff(path []string, attrs map[string]strin
 		}
 	}
 
-	// Don't trust helper/schema to return a valid count, or even have one at
-	// all.
-	result[name+"."+idx] = countFlatmapContainerValues(name+"."+idx, result)
+	// Just like in nested list blocks, for simple lists we may need to fill in
+	// missing empty strings.
+	countKey := name + "." + idx
+	count := result[countKey]
+	length, _ := strconv.Atoi(count)
+
+	if count != "" && count != hcl2shim.UnknownVariableValue &&
+		attrSchema.Type.Equals(cty.List(cty.String)) {
+		// insert empty strings into missing indexes
+		for i := 0; i < length; i++ {
+			key := fmt.Sprintf("%s.%d", name, i)
+			if _, ok := result[key]; !ok {
+				result[key] = ""
+			}
+		}
+	}
+
+	// now check for truncation in any type of list
+	if attrSchema.Type.IsListType() {
+		for key := range result {
+			if key == countKey {
+				continue
+			}
+
+			if len(key) <= len(name)+1 {
+				// not sure what this is, but don't panic
+				continue
+			}
+
+			index := key[len(name)+1:]
+
+			// It is possible to have nested sets or maps, so look for another dot
+			dot := strings.Index(index, ".")
+			if dot > 0 {
+				index = index[:dot]
+			}
+
+			// This shouldn't have any more dots, since the element type is only string.
+			num, err := strconv.Atoi(index)
+			if err != nil {
+				log.Printf("[ERROR] bad list index in %q: %s", currentKey, err)
+				continue
+			}
+
+			if num >= length {
+				delete(result, key)
+			}
+		}
+	}
+
+	// Fill in the count value if it wasn't present in the diff for some reason,
+	// or if there is no count at all.
+	_, countDiff := d.Attributes[countKey]
+	if result[countKey] == "" || (!countDiff && len(keys) != len(result)) {
+		result[countKey] = countFlatmapContainerValues(countKey, result)
+	}
+
 	return result, nil
 }
 

@@ -4,7 +4,7 @@ page_title: "Provisioners: null_resource"
 sidebar_current: "docs-provisioners-null-resource"
 description: |-
   The `null_resource` is a resource allows you to configure provisioners that
-  are not directly associated with a single exiting resource.
+  are not directly associated with a single existing resource.
 ---
 
 # null\_resource
@@ -42,7 +42,7 @@ resource "null_resource" "cluster" {
   }
 
   provisioner "remote-exec" {
-    # Bootstrap script called with private_ip of each node in the clutser
+    # Bootstrap script called with private_ip of each node in the cluster
     inline = [
       "bootstrap-cluster.sh ${join(" ", aws_instance.cluster.*.private_ip)}",
     ]

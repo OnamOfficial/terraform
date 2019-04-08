@@ -1,12 +1,16 @@
 ---
 layout: "functions"
 page_title: "formatdate - Functions - Configuration Language"
-sidebar_current: "docs-funcs-string-formatdate-x"
+sidebar_current: "docs-funcs-datetime-formatdate"
 description: |-
   The formatdate function converts a timestamp into a different time format.
 ---
 
 # `formatdate` Function
+
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Interpolation Syntax](../../configuration-0-11/interpolation.html).
 
 `formatdate` converts a timestamp into a different time format.
 

@@ -59,16 +59,6 @@ resource "test_resource_nested_set" "foo" {
 
 // the empty type_list must be passed to the provider with 1 nil element
 func TestResourceNestedSet_emptyBlock(t *testing.T) {
-	checkFunc := func(s *terraform.State) error {
-		root := s.ModuleByPath(addrs.RootModuleInstance)
-		res := root.Resources["test_resource_nested_set.foo"]
-		for k, v := range res.Primary.Attributes {
-			if strings.HasPrefix(k, "type_list") && v != "1" {
-				return fmt.Errorf("unexpected set value: %s:%s", k, v)
-			}
-		}
-		return nil
-	}
 	resource.UnitTest(t, resource.TestCase{
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckResourceDestroy,
@@ -80,7 +70,9 @@ resource "test_resource_nested_set" "foo" {
 	}
 }
 				`),
-				Check: checkFunc,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("test_resource_nested_set.foo", "type_list.#", "1"),
+				),
 			},
 		},
 	})
@@ -498,6 +490,90 @@ resource "test_resource_nested_set" "foo" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
 						"test_resource_nested_set.foo", "multi.#", "1",
+					),
+				),
+			},
+		},
+	})
+}
+
+func TestResourceNestedSet_multipleUnknownSetElements(t *testing.T) {
+	checkFunc := func(s *terraform.State) error {
+		return nil
+	}
+	resource.UnitTest(t, resource.TestCase{
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckResourceDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: strings.TrimSpace(`
+resource "test_resource_nested_set" "a" {
+}
+
+resource "test_resource_nested_set" "b" {
+}
+
+resource "test_resource_nested_set" "c" {
+	multi {
+		optional = test_resource_nested_set.a.id
+	}
+	multi {
+		optional = test_resource_nested_set.b.id
+	}
+}
+				`),
+				Check: checkFunc,
+			},
+		},
+	})
+}
+
+func TestResourceNestedSet_interpolationChanges(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckResourceDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: strings.TrimSpace(`
+resource "test_resource_nested_set" "foo" {
+	single {
+		value = "x"
+	}
+}
+resource "test_resource_nested_set" "bar" {
+	single {
+		value = test_resource_nested_set.foo.id
+	}
+}
+				`),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(
+						"test_resource_nested_set.foo", "single.#", "1",
+					),
+					resource.TestCheckResourceAttr(
+						"test_resource_nested_set.bar", "single.#", "1",
+					),
+				),
+			},
+			resource.TestStep{
+				Config: strings.TrimSpace(`
+resource "test_resource_nested_set" "baz" {
+	single {
+		value = "x"
+	}
+}
+resource "test_resource_nested_set" "bar" {
+	single {
+		value = test_resource_nested_set.baz.id
+	}
+}
+				`),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(
+						"test_resource_nested_set.baz", "single.#", "1",
+					),
+					resource.TestCheckResourceAttr(
+						"test_resource_nested_set.bar", "single.#", "1",
 					),
 				),
 			},

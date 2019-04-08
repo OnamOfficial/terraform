@@ -9,6 +9,10 @@ description: |-
 
 # Local Values
 
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Local Values](../configuration-0-11/locals.html).
+
 A local value assigns a name to an [expression](./expressions.html),
 allowing it to be used multiple times within a module without repeating
 it.
@@ -23,7 +27,7 @@ when the meaning is clear from context.
 
 ## Declaring a Local Value
 
-A set of related local values can be delared together in a single `locals`
+A set of related local values can be declared together in a single `locals`
 block:
 
 ```hcl

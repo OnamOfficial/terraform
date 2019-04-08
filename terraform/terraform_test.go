@@ -446,6 +446,8 @@ aws_instance.bar:
 aws_instance.foo:
   ID = foo
   provider = provider.aws
+  compute = value
+  compute_value = 1
   num = 2
   type = aws_instance
   value = computed_value
@@ -659,6 +661,8 @@ aws_instance.bar:
 aws_instance.foo:
   ID = foo
   provider = provider.aws
+  compute = value
+  compute_value = 1
   num = 2
   type = aws_instance
   value = computed_value
@@ -796,6 +800,8 @@ const testTerraformApplyErrorDestroyCreateBeforeDestroyStr = `
 aws_instance.bar: (1 deposed)
   ID = foo
   provider = provider.aws
+  require_new = xyz
+  type = aws_instance
   Deposed ID 1 = bar
 `
 
@@ -1029,6 +1035,7 @@ const testTerraformApplyUnknownAttrStr = `
 aws_instance.foo: (tainted)
   ID = foo
   provider = provider.aws
+  compute = unknown
   num = 2
   type = aws_instance
 `

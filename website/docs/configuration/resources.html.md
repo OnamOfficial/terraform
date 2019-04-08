@@ -10,6 +10,10 @@ description: |-
 
 # Resources
 
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Resources](../configuration-0-11/resources.html).
+
 _Resources_ are the most important element in the Terraform language.
 Each resource block describes one or more infrastructure objects, such
 as virtual networks, compute instances, or higher-level components such
@@ -41,6 +45,9 @@ Within the block body (between `{` and `}`) are the configuration arguments
 for the resource itself. Most arguments in this section depend on the
 resource type, and indeed in this example both `ami` and `instance_type` are
 arguments defined specifically for [the `aws_instance` resource type](/docs/providers/aws/r/instance.html).
+
+-> **Note:** Resource names must start with a letter or underscore, and may
+contain only letters, digits, underscores, and dashes.
 
 ## Resource Types and Arguments
 
@@ -127,8 +134,8 @@ However, some dependencies cannot be recognized implicitly in configuration. For
 example, if Terraform must manage access control policies _and_ take actions
 that require those policies to be present, there is a hidden dependency between
 the access policy and a resource whose creation depends on it. In these rare
-cases, [the `depends_on` meta-argument](#depends_on-hidden-resource-dependencies)
-can explicitly specify a dependency.
+cases, [the `depends_on` meta-argument][inpage-depend] can explicitly specify a
+dependency.
 
 ## Meta-Arguments
 
@@ -144,14 +151,16 @@ any resource type to change the behavior of resources:
 These arguments often have additional restrictions on what language features can
 be used with them, which are described in each
 
-### `depends_on`: Hidden Resource Dependencies
+### `depends_on`: Explicit Resource Dependencies
 
-[inpage-depend]: #depends_on-hidden-resource-dependencies
+[inpage-depend]: #depends_on-explicit-resource-dependencies
 
 Use the `depends_on` meta-argument to handle hidden resource dependencies that
-Terraform can't automatically infer. Hidden dependencies happen when a resource
-relies on some other resource's behavior but _doesn't_ access any of that
-resource's data in its arguments.
+Terraform can't automatically infer.
+
+Explicitly specifying a dependency is only necessary when a resource relies on
+some other resource's behavior but _doesn't_ access any of that resource's data
+in its arguments.
 
 This argument is available in all `resource` blocks, regardless of resource
 type. For example:
@@ -378,7 +387,7 @@ meta-arguments are supported:
     both a new and an old object to exist concurrently. Some resource types
     offer special options to append a random suffix onto each object name to
     avoid collisions, for example. Terraform CLI cannot automatically activate
-    such features, so you must understand the constrants for each resource
+    such features, so you must understand the constraints for each resource
     type before using `create_before_destroy` with it.
 
 * `prevent_destroy` (bool) - This meta-argument, when set to `true`, will
@@ -436,7 +445,7 @@ meta-arguments are supported:
 
 The `lifecycle` settings all effect how Terraform constructs and traverses
 the dependency graph. As a result, only literal values can be used because
-the processing happens to early for arbitrary expression evaluation.
+the processing happens too early for arbitrary expression evaluation.
 
 ### `provisioner` and `connection`: Resource Provisioners
 

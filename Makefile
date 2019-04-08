@@ -55,7 +55,7 @@ test-compile: fmtcheck generate
 		echo "  make test-compile TEST=./builtin/providers/test"; \
 		exit 1; \
 	fi
-	go test -c $(TEST) $(TESTARGS)
+	go test -mod=vendor -c $(TEST) $(TESTARGS)
 
 # testrace runs the race checker
 testrace: fmtcheck generate
@@ -72,14 +72,13 @@ cover:
 # generate runs `go generate` to build the dynamically generated
 # source files, except the protobuf stubs which are built instead with
 # "make protobuf".
-generate:
-	@which stringer > /dev/null; if [ $$? -ne 0 ]; then \
-	  GO111MODULE=off go get -u golang.org/x/tools/cmd/stringer; \
-	fi
-	# We turn off modules for "go generate" because our downstream generate
-	# commands are not all ready to deal with Go modules yet, and this
-	# avoids downloading all of the deps that are in the vendor dir anyway.
-	GO111MODULE=off go generate ./...
+generate: tools
+	GOFLAGS=-mod=vendor go generate ./...
+	# go fmt doesn't support -mod=vendor but it still wants to populate the
+	# module cache with everything in go.mod even though formatting requires
+	# no dependencies, and so we're disabling modules mode for this right
+	# now until the "go fmt" behavior is rationalized to either support the
+	# -mod= argument or _not_ try to install things.
 	GO111MODULE=off go fmt command/internal_plugin_list.go > /dev/null
 
 # We separate the protobuf generation because most development tasks on

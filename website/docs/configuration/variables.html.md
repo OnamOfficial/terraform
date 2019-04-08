@@ -9,6 +9,10 @@ description: |-
 
 # Input Variables
 
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Input Variables](../configuration-0-11/variables.html).
+
 Input variables serve as parameters for a Terraform module, allowing aspects
 of the module to be customized without altering the module's own source code,
 and allowing modules to be shared between different configurations.
@@ -58,6 +62,8 @@ _except_ the following:
 - `count`
 - `for_each`
 - `lifecycle`
+- `depends_on`
+- `locals`
 
 These names are reserved for meta-arguments in
 [module configuration blocks](./modules.html), and cannot be
@@ -166,6 +172,8 @@ when running the `terraform plan` and `terraform apply` commands:
 
 ```
 terraform apply -var="image_id=ami-abc123"
+terraform apply -var='image_id_list=["ami-abc123","ami-def456"]'
+terraform apply -var='image_id_map={"us-east-1":"ami-abc123","us-east-2":"ami-def456"}'
 ```
 
 The `-var` option can be used any number of times in a single command.

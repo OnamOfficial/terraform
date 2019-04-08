@@ -8,6 +8,10 @@ description: |-
 
 # Providers
 
+-> **Note:** This page is about Terraform 0.12 and later. For Terraform 0.11 and
+earlier, see
+[0.11 Configuration Language: Providers](../configuration-0-11/providers.html).
+
 While [resources](./resources.html) are the primary construct
 in the Terraform language, the _behaviors_ of resources rely on their
 associated resource types, and these types are defined by _providers_.
@@ -221,7 +225,7 @@ module "aws_vpc" {
 ```
 
 Modules have some special requirements when passing in providers; see
-[Providers within Modules](/docs/modules/usage.html#providers-within-modules)
+[Providers within Modules](./modules.html#providers-within-modules)
 for more details. In most cases, only _root modules_ should define provider
 configurations, with all child modules obtaining their provider configurations
 from their parents.

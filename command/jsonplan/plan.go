@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform/states"
 	"github.com/hashicorp/terraform/states/statefile"
 	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform/version"
 )
 
 // FormatVersion represents the version of the json format and will be
@@ -26,8 +27,10 @@ const FormatVersion = "0.1"
 // Plan is the top-level representation of the json format of a plan. It includes
 // the complete config and current state.
 type plan struct {
-	FormatVersion string      `json:"format_version,omitempty"`
-	PlannedValues stateValues `json:"planned_values,omitempty"`
+	FormatVersion    string      `json:"format_version,omitempty"`
+	TerraformVersion string      `json:"terraform_version,omitempty"`
+	Variables        variables   `json:"variables,omitempty"`
+	PlannedValues    stateValues `json:"planned_values,omitempty"`
 	// ResourceChanges are sorted in a user-friendly order that is undefined at
 	// this time, but consistent.
 	ResourceChanges []resourceChange  `json:"resource_changes,omitempty"`
@@ -74,18 +77,36 @@ type output struct {
 	Value     json.RawMessage `json:"value,omitempty"`
 }
 
+// variables is the JSON representation of the variables provided to the current
+// plan.
+type variables map[string]*variable
+
+type variable struct {
+	Value json.RawMessage `json:"value,omitempty"`
+}
+
 // Marshal returns the json encoding of a terraform plan.
 func Marshal(
 	config *configs.Config,
 	p *plans.Plan,
 	sf *statefile.File,
 	schemas *terraform.Schemas,
+	stateSchemas *terraform.Schemas,
 ) ([]byte, error) {
+	if stateSchemas == nil {
+		stateSchemas = schemas
+	}
 
 	output := newPlan()
+	output.TerraformVersion = version.String()
+
+	err := output.marshalPlanVariables(p.VariableValues, schemas)
+	if err != nil {
+		return nil, fmt.Errorf("error in marshalPlanVariables: %s", err)
+	}
 
 	// output.PlannedValues
-	err := output.marshalPlannedValues(p.Changes, schemas)
+	err = output.marshalPlannedValues(p.Changes, schemas)
 	if err != nil {
 		return nil, fmt.Errorf("error in marshalPlannedValues: %s", err)
 	}
@@ -103,9 +124,11 @@ func Marshal(
 	}
 
 	// output.PriorState
-	output.PriorState, err = jsonstate.Marshal(sf, schemas)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling prior state: %s", err)
+	if sf != nil && !sf.State.Empty() {
+		output.PriorState, err = jsonstate.Marshal(sf, stateSchemas)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling prior state: %s", err)
+		}
 	}
 
 	// output.Config
@@ -114,9 +137,31 @@ func Marshal(
 		return nil, fmt.Errorf("error marshaling config: %s", err)
 	}
 
-	// add some polish
-	ret, err := json.MarshalIndent(output, "", "  ")
+	ret, err := json.Marshal(output)
 	return ret, err
+}
+
+func (p *plan) marshalPlanVariables(vars map[string]plans.DynamicValue, schemas *terraform.Schemas) error {
+	if len(vars) == 0 {
+		return nil
+	}
+
+	p.Variables = make(variables, len(vars))
+
+	for k, v := range vars {
+		val, err := v.Decode(cty.DynamicPseudoType)
+		if err != nil {
+			return err
+		}
+		valJSON, err := ctyjson.Marshal(val, val.Type())
+		if err != nil {
+			return err
+		}
+		p.Variables[k] = &variable{
+			Value: valJSON,
+		}
+	}
+	return nil
 }
 
 func (p *plan) marshalResourceChanges(changes *plans.Changes, schemas *terraform.Schemas) error {
@@ -137,7 +182,11 @@ func (p *plan) marshalResourceChanges(changes *plans.Changes, schemas *terraform
 			continue
 		}
 
-		schema, _ := schemas.ResourceTypeConfig(rc.ProviderAddr.ProviderConfig.StringCompact(), addr.Resource.Resource.Mode, addr.Resource.Resource.Type)
+		schema, _ := schemas.ResourceTypeConfig(
+			rc.ProviderAddr.ProviderConfig.Type,
+			addr.Resource.Resource.Mode,
+			addr.Resource.Resource.Type,
+		)
 		if schema == nil {
 			return fmt.Errorf("no schema found for %s", r.Address)
 		}
@@ -202,7 +251,9 @@ func (p *plan) marshalResourceChanges(changes *plans.Changes, schemas *terraform
 			AfterUnknown: a,
 		}
 
-		r.Deposed = rc.DeposedKey == states.NotDeposed
+		if rc.DeposedKey != states.NotDeposed {
+			r.Deposed = rc.DeposedKey.String()
+		}
 
 		key := addr.Resource.Key
 		if key != nil {
@@ -220,6 +271,7 @@ func (p *plan) marshalResourceChanges(changes *plans.Changes, schemas *terraform
 		r.ModuleAddress = addr.Module.String()
 		r.Name = addr.Resource.Resource.Name
 		r.Type = addr.Resource.Resource.Type
+		r.ProviderName = rc.ProviderAddr.ProviderConfig.StringCompact()
 
 		p.ResourceChanges = append(p.ResourceChanges, r)
 
